@@ -31,6 +31,7 @@ First, we introduce a VLM-based preference model **HPSv3**, trained on a "wide s
 
 
 ## ✨ Updates
+- **[2025-08-19]** 🖼️ We release [DanceGRPO](https://github.com/XueZeyue/DanceGRPO) results of HPSv3! Great thanks to [XueZeyue](https://github.com/XueZeyue) for training it!
 - **[2025-08-08]** 🎉 We release [HPDv3](https://huggingface.co/datasets/MizzenAI/HPDv3) dataset!.
 - **[2025-08-06]** 🎉 We release HPSv3: inference code, training code, cohp code and [HPSv3 model weights](https://huggingface.co/MizzenAI/HPSv3). And [PyPI Package](https://pypi.org/project/hpsv3/).
 
@@ -353,6 +354,11 @@ All experiments using the same setting and we use **Stable Diffusion 1.4** as ou
 ### More Results of HPsv3 as Reward Model (Stable Diffusion 1.4)
 <p align="left">
   <img src="assets/rl_teaser.jpg" alt="cohp" width="600"/>
+</p>
+
+### Results of HPsv3 as Reward Model (FLUX.1 dev)
+<p align="left">
+  <img src="assets/rl3.jpg" alt="cohp" width="600"/>
 </p>
 
 ## 📚 Citation
