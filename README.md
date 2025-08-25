@@ -73,9 +73,6 @@ pip install -e .
 
 #### Simple Inference Example
 
-We provide two ways to run inference:
-
-1. Using image paths
 ```python
 from hpsv3 import HPSv3RewardInferencer
 
@@ -91,30 +88,6 @@ prompts = [
 
 # Get preference scores
 rewards = inferencer.reward(prompts, image_paths=image_paths)
-scores = [reward[0].item() for reward in rewards]  # Extract mu values
-print(f"Image scores: {scores}")
-```
-
-2. Using Base64-encoded images
-```python
-from hpsv3 import HPSv3RewardInferencer
-
-# Initialize the model
-inferencer = HPSv3RewardInferencer(device='cuda')
-
-# Input: base64-encoded images and corresponding prompts
-image_base64 = [
-    "data:{mime_type};base64,{base64_str}",
-    "data:{mime_type};base64,{base64_str}"
-]
-
-prompts = [
-  "cute chibi anime cartoon fox, smiling wagging tail with a small cartoon heart above sticker",
-  "cute chibi anime cartoon fox, smiling wagging tail with a small cartoon heart above sticker"
-]
-
-# Get preference scores
-rewards = inferencer.reward(prompts, image_base64=image_base64)
 scores = [reward[0].item() for reward in rewards]  # Extract mu values
 print(f"Image scores: {scores}")
 ```

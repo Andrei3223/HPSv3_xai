@@ -1,6 +1,5 @@
 
 import os
-from typing import List
 from collections.abc import Mapping
 import torch
 import huggingface_hub
@@ -94,23 +93,20 @@ class HPSv3RewardInferencer():
         if len(inputs) == 0:
             raise ValueError
         return inputs
-
-    def prepare_batch(self, prompts, image_paths: List[str] = None, image_base64: List[str] = None):
+    
+    def prepare_batch(self, image_paths, prompts):
         max_pixels = 256 * 28 * 28
         min_pixels = 256 * 28 * 28
-        if image_paths is None and image_base64 is None:
-            raise ValueError("Either image_paths or image_base64 must be provided.")
         message_list = []
-        use_path = image_paths is not None
-        it_images = image_paths if use_path else image_base64
-        for text, image in zip(prompts, it_images):
+        for text, image in zip(prompts, image_paths):
             out_message = [
                 {
                     "role": "user",
                     "content": [
                         {
-                            "type": "image" if use_path else "image_url",
-                            "min_pixels": min_pixels,
+                            "type": "image",
+                            "image": image,
+                            "min_pixels": max_pixels,
                             "max_pixels": max_pixels,
                         },
                         {
@@ -125,10 +121,6 @@ class HPSv3RewardInferencer():
                     ],
                 }
             ]
-            if use_path:
-                out_message[0]["content"][0]["image"] = image
-            else:
-                out_message[0]["content"][0]["image_url"] = image
 
             message_list.append(out_message)
 
@@ -145,8 +137,8 @@ class HPSv3RewardInferencer():
         return batch
 
     @torch.inference_mode()
-    def reward(self, prompts, image_paths: List[str] = None, image_base64: List[str] = None):
-        batch = self.prepare_batch(prompts, image_paths=image_paths, image_base64=image_base64)
+    def reward(self, prompts, image_paths, prompts):
+        batch = self.prepare_batch(image_paths, prompts)
         rewards = self.model(
             return_dict=True,
             **batch
