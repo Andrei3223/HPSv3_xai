@@ -136,8 +136,8 @@ class HPSv3RewardInferencer():
         batch = self._prepare_inputs(batch)
         return batch
 
-    def reward(self, image_paths, prompts):
-        
+    @torch.inference_mode()
+    def reward(self, prompts, image_paths, prompts):
         batch = self.prepare_batch(image_paths, prompts)
         rewards = self.model(
             return_dict=True,
@@ -145,6 +145,8 @@ class HPSv3RewardInferencer():
         )["logits"]
 
         return rewards
+    
+    
 
 
 if __name__ == "__main__":
