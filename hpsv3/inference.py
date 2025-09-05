@@ -137,7 +137,7 @@ class HPSv3RewardInferencer():
         return batch
 
     @torch.inference_mode()
-    def reward(self, prompts, image_paths, prompts):
+    def reward(self, prompts, image_paths):
         batch = self.prepare_batch(image_paths, prompts)
         rewards = self.model(
             return_dict=True,
