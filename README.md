@@ -385,6 +385,9 @@ If you find HPSv3 useful in your research, please cite our work:
 We would like to thank the [VideoAlign](https://github.com/KwaiVGI/VideoAlign) codebase for providing valuable references.
 
 ---
+## ⭐️ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=MizzenAI/HPSv3&type=Date)](https://www.star-history.com/#MizzenAI/HPSv3&Date)
 
 ## 💬 Support
 
