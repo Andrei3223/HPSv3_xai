@@ -27,8 +27,8 @@ HPDV3_DIR=/gpfs/scratch1/shared/scur0077/datasets/HPDv3
 export HF_HOME=/gpfs/scratch1/shared/scur0077/hf_cache
 export TOKENIZERS_PARALLELISM=false
 
-# Conda environment name created from environment.yaml (`conda env create ...`).
-CONDA_ENV=hpsv3
+# Path to the venv created on the login node (see setup commands in the README).
+VENV_DIR=/gpfs/scratch1/shared/scur0283/venvs/hpsv3
 
 # Experiment knobs.
 N_SEGMENTS=100
@@ -41,13 +41,12 @@ mkdir -p "$PROJECT/logs"
 cd "$PROJECT"
 
 # --- environment ---
+# The venv was built with the system python3.11; activating it is enough
+# (no Python module needed). module load 2023 kept for any other system libs.
 module purge
-module load 2023 || true   # adjust to the software stack available on your node
-# Activate conda. If you use your own miniconda, set CONDA_BASE accordingly.
-CONDA_BASE="$(conda info --base 2>/dev/null || echo "$HOME/miniconda3")"
+module load 2023 || true
 # shellcheck source=/dev/null
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate "$CONDA_ENV"
+source "$VENV_DIR/bin/activate"
 
 echo "Python: $(which python)"
 nvidia-smi || true
