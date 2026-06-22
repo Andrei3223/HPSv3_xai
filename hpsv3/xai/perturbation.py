@@ -543,7 +543,11 @@ def build_scorer(args, img_for_temp: bool = False) -> Tuple[ScoreFn, dict]:
     if args.model == "hpsv3":
         from hpsv3.inference import HPSv3RewardInferencer
 
-        inferencer = HPSv3RewardInferencer(device=args.device)
+        inferencer = HPSv3RewardInferencer(
+            device=args.device,
+            checkpoint_path=args.hpsv3_ckpt,
+            config_path=args.hpsv3_config,
+        )
         if not args.prompt:
             raise ValueError("--prompt is required for HPSv3.")
         score_fn = make_hpsv3_scorer(inferencer, args.prompt, args.batch_size, temp_dir)
@@ -586,6 +590,8 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--model", choices=["hpsv3", "editreward"], default="hpsv3")
     p.add_argument("--image", required=True, help="Image whose regions are perturbed (I_e for editing).")
     p.add_argument("--prompt", default=None, help="HPSv3: text prompt to score against.")
+    p.add_argument("--hpsv3-ckpt", default=None, help="Local HPSv3 .safetensors checkpoint (skips HF download).")
+    p.add_argument("--hpsv3-config", default=None, help="Local HPSv3 yaml config (defaults to packaged HPSv3_7B.yaml).")
     # EditReward-specific
     p.add_argument("--source", default=None, help="EditReward: source image I_s path.")
     p.add_argument("--instruction", default=None, help="EditReward: edit instruction P.")
