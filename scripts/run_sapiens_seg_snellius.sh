@@ -23,8 +23,8 @@ PROJECT="${SLURM_SUBMIT_DIR:-$PWD}"
 # Sapiens venv (torch + numpy + opencv). Created separately (see step-by-step).
 SAPIENS_VENV=/gpfs/scratch1/shared/scur0283/venvs/sapiens
 
-# Sapiens-lite seg TorchScript checkpoint (.pt2). 0.6B is a good speed/quality pick.
-SAPIENS_CKPT=/gpfs/scratch1/shared/scur0283/models/sapiens/sapiens_0.6b_goliath_best_goliath_mIoU_7777_epoch_178_torchscript.pt2
+# Dir holding the Sapiens-lite seg TorchScript checkpoint (.pt2); first one is used.
+SAPIENS_MODELS_DIR=/gpfs/scratch1/shared/scur0283/models/sapiens
 # Path to sapiens/lite/demo (so exact class names are read from the repo).
 SAPIENS_DEMO_DIR=/gpfs/scratch1/shared/scur0283/sapiens/lite/demo
 
@@ -48,6 +48,13 @@ if [[ ! -f "$MANIFEST" ]]; then
   echo "  python scripts/build_manifest.py --hpdv3-dir <HPDv3> --num-dataset 5 --out manifest.json" >&2
   exit 1
 fi
+
+SAPIENS_CKPT="$(ls "$SAPIENS_MODELS_DIR"/*.pt2 2>/dev/null | head -1 || true)"
+if [[ -z "${SAPIENS_CKPT}" ]]; then
+  echo "ERROR: no .pt2 seg checkpoint found in $SAPIENS_MODELS_DIR" >&2
+  exit 1
+fi
+echo "Using Sapiens checkpoint: $SAPIENS_CKPT"
 
 srun python scripts/sapiens_segment.py \
   --checkpoint "$SAPIENS_CKPT" \

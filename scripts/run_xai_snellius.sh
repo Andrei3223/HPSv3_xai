@@ -37,8 +37,9 @@ NUM_DATASET=5          # extra images sampled from HPDv3 (plus the 2 repo assets
 BATCH_SIZE=16
 
 # Region source: "slic" (default superpixels) or "sapiens" (semantic body parts).
+# Override at submit time:  sbatch --export=ALL,SEGMENTS=sapiens scripts/run_xai_snellius.sh
 # For sapiens, run scripts/run_sapiens_seg_snellius.sh FIRST (same manifest).
-SEGMENTS=slic
+SEGMENTS="${SEGMENTS:-slic}"
 MANIFEST="$PROJECT/manifest.json"               # shared with the Sapiens stage
 SAPIENS_DIR="$PROJECT/results/sapiens_labels"   # Stage-0 output dir
 # ----------------------------------------------------------------------------
