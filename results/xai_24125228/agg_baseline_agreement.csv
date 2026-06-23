@@ -1,0 +1,13 @@
+image,mode,spearman_vs_black
+38eb6939,gray,0.496
+38eb6939,mean,0.566
+38eb6939,blur,0.458
+38eb6939,black,1.0
+e7361205,gray,0.608
+e7361205,mean,0.585
+e7361205,blur,0.214
+e7361205,black,1.0
+047eb1a3,gray,0.423
+047eb1a3,mean,0.389
+047eb1a3,blur,0.391
+047eb1a3,black,1.0

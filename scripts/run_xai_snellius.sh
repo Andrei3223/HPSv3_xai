@@ -10,7 +10,7 @@
 #SBATCH --partition=gpu_h100
 #SBATCH --gpus=1
 #SBATCH --cpus-per-task=16
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/xai_%j.out
 #SBATCH --error=logs/xai_%j.err
 
@@ -33,7 +33,7 @@ VENV_DIR=/gpfs/scratch1/shared/scur0283/venvs/hpsv3
 # Experiment knobs.
 N_SEGMENTS=100
 N_SAMPLES=500
-NUM_DATASET=3          # how many extra images to sample from HPDv3 (0 = assets only)
+NUM_DATASET=5          # extra images sampled from HPDv3 (plus the 2 repo assets)
 BATCH_SIZE=16
 # ----------------------------------------------------------------------------
 
@@ -63,6 +63,8 @@ OUT="results/xai_${SLURM_JOB_ID:-local}"
 echo "Outputs -> $OUT"
 
 # --- run the full experiment matrix (model loaded once) ---
+# Faithfulness is run for BOTH the gray (soft) and black (hard) baselines so the
+# deletion test can be read off the clean black baseline, not just gray.
 srun python -m hpsv3.xai.run_experiments \
   --hpsv3-ckpt "$CKPT" \
   --hpdv3-dir "$HPDV3_DIR" --num-dataset "$NUM_DATASET" \
@@ -70,12 +72,18 @@ srun python -m hpsv3.xai.run_experiments \
   --modes gray mean blur black \
   --n-segments "$N_SEGMENTS" --n-samples "$N_SAMPLES" \
   --batch-size "$BATCH_SIZE" --device cuda \
-  --faithfulness --faith-method occlusion --faith-mode gray \
+  --faithfulness --faith-methods occlusion --faith-modes gray black \
   --output-dir "$OUT"
+
+# --- aggregate into report tables, figures, montages, REPORT.md (no GPU needed) ---
+python -m hpsv3.xai.aggregate --results-dir "$OUT"
 
 echo "================================================================"
 echo "DONE. Inspect:"
-echo "  $OUT/summary.csv         (all metrics)"
-echo "  $OUT/*.png               (heatmaps + faithfulness curves)"
+echo "  $OUT/REPORT.md           (full report with embedded figures)"
+echo "  $OUT/summary.csv         (raw per-experiment metrics)"
+echo "  $OUT/agg_*.csv           (aggregated tables)"
+echo "  $OUT/fig_*.png           (summary figures)"
+echo "  $OUT/montage_*.png       (per-image heatmap grids)"
 echo "  $OUT/*.npz               (raw results for hpsv3.xai.compare)"
 echo "================================================================"

@@ -1,0 +1,4 @@
+image,method,mode,deletion_auc,deletion_auc_random,insertion_auc,insertion_auc_random
+047eb1a3,occlusion,gray,5.5548,5.9511,6.961,6.4703
+38eb6939,occlusion,gray,6.3069,5.9804,7.5708,6.8767
+e7361205,occlusion,gray,6.8723,6.3433,8.5909,5.8618

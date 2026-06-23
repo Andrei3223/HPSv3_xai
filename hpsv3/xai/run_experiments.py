@@ -46,9 +46,12 @@ _FOX_PROMPT = (
     "cute chibi anime cartoon fox, smiling wagging tail with a small cartoon "
     "heart above sticker"
 )
+# Resolve assets relative to the repo root so they work regardless of the job's
+# working directory (this is why the assets were dropped in the first run).
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_MANIFEST = [
-    {"image": "assets/example1.png", "prompt": _FOX_PROMPT},
-    {"image": "assets/example2.png", "prompt": _FOX_PROMPT},
+    {"image": os.path.join(_REPO_ROOT, "assets/example1.png"), "prompt": _FOX_PROMPT},
+    {"image": os.path.join(_REPO_ROOT, "assets/example2.png"), "prompt": _FOX_PROMPT},
 ]
 
 
@@ -115,9 +118,10 @@ def main(argv=None) -> None:
     p.add_argument("--batch-size", type=int, default=16)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--faithfulness", action="store_true",
-                   help="Run deletion/insertion curves for one combo per image.")
-    p.add_argument("--faith-method", default="occlusion")
-    p.add_argument("--faith-mode", default="gray")
+                   help="Run deletion/insertion curves for the selected combos per image.")
+    p.add_argument("--faith-methods", nargs="+", default=["occlusion"],
+                   choices=["occlusion", "lime"])
+    p.add_argument("--faith-modes", nargs="+", default=["gray", "black"])
     args = p.parse_args(argv)
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -186,7 +190,7 @@ def main(argv=None) -> None:
                     "insertion_auc": "", "insertion_auc_random": "",
                 }
 
-                if args.faithfulness and method == args.faith_method and mode == args.faith_mode:
+                if args.faithfulness and method in args.faith_methods and mode in args.faith_modes:
                     cur = faithfulness_curves(score_fn, img, labels, imp, mode=mode, seed=args.seed)
                     save_faithfulness(cur, os.path.join(args.output_dir, f"{tag}_faithfulness.png"))
                     row.update(
