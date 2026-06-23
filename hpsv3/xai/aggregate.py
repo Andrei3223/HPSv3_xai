@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import json
 import os
 from collections import defaultdict
 
@@ -81,12 +82,61 @@ def discover(results_dir: str):
 
 def load_npz(path: str):
     d = np.load(path)
+    meta = {}
+    if "meta" in d:
+        try:
+            meta = json.loads(str(d["meta"]))
+        except Exception:
+            meta = {}
     return {
         "importances": d["importances"],
         "base_score": float(d["base_score"]),
         "labels": d["labels"],
         "img": d["img"],
+        "meta": meta,
     }
+
+
+def aggregate_parts(items, method="occlusion", mode="black"):
+    """
+    Aggregate importances by semantic part across images (Sapiens runs only).
+    Returns (rows, present) where rows are per-part stats and `present` is True
+    if any result carried part names.
+    """
+    by_part = defaultdict(list)        # part -> [raw importance per image]
+    by_part_norm = defaultdict(list)   # part -> [importance / area-fraction]
+    present = False
+    for stem, d in items.items():
+        key = (method, mode)
+        if key not in d:
+            continue
+        r = load_npz(d[key])
+        part_names = r["meta"].get("part_names")
+        if not part_names:
+            continue
+        present = True
+        part_names = {int(k): v for k, v in part_names.items()}
+        labels, imp = r["labels"], r["importances"]
+        total = labels.size
+        for lid, name in part_names.items():
+            if lid >= len(imp):
+                continue
+            area = float((labels == lid).sum()) / total
+            by_part[name].append(float(imp[lid]))
+            if area > 0:
+                by_part_norm[name].append(float(imp[lid]) / area)
+    rows = []
+    for name in sorted(by_part):
+        vals = np.array(by_part[name])
+        nvals = np.array(by_part_norm.get(name, []))
+        rows.append({
+            "part": name, "n_images": len(vals),
+            "mean_importance": round(float(vals.mean()), 4),
+            "std_importance": round(float(vals.std()), 4),
+            "mean_area_norm_importance": round(float(nvals.mean()) if len(nvals) else float("nan"), 4),
+        })
+    rows.sort(key=lambda r: r["mean_importance"], reverse=True)
+    return rows, present
 
 
 def read_prompts(results_dir: str):
@@ -234,6 +284,33 @@ def make_figures(results_dir, per_exp, method_agree, baseline_agree, faith):
     return figs
 
 
+def make_part_figure(results_dir, part_rows, method, mode):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    rows = [r for r in part_rows if r["part"] != "background"]
+    if not rows:
+        return None
+    parts = [r["part"] for r in rows]
+    raw = [r["mean_importance"] for r in rows]
+    norm = [r["mean_area_norm_importance"] for r in rows]
+    x = np.arange(len(parts))
+    fig, axes = plt.subplots(1, 2, figsize=(max(8, 1.2 * len(parts)), 5))
+    axes[0].bar(x, raw, color="C0")
+    axes[0].set_title(f"Mean importance per part ({method}/{mode})")
+    axes[0].set_ylabel("mean reward drop")
+    axes[1].bar(x, norm, color="C1")
+    axes[1].set_title("Area-normalized (importance per % area)")
+    for ax in axes:
+        ax.set_xticks(x); ax.set_xticklabels(parts, rotation=40, ha="right", fontsize=8)
+        ax.axhline(0, color="k", lw=0.5)
+    fig.tight_layout()
+    name = "fig_part_importance.png"
+    fig.savefig(os.path.join(results_dir, name), dpi=150); plt.close(fig)
+    return name
+
+
 def make_montages(results_dir, items):
     import matplotlib
     matplotlib.use("Agg")
@@ -277,7 +354,8 @@ def _md_table(rows, cols):
     return "\n".join(out)
 
 
-def write_report(results_dir, items, bases, nsp, per_exp, method_agree, baseline_agree, faith, figs, montages, prompts):
+def write_report(results_dir, items, bases, nsp, per_exp, method_agree, baseline_agree, faith,
+                 figs, montages, prompts, part_rows=None, part_fig=None, part_combo=("occlusion", "black")):
     L = []
     L.append("# HPSv3 Perturbation-Attribution Report\n")
     L.append(f"Results directory: `{os.path.basename(results_dir.rstrip('/'))}`  ")
@@ -340,7 +418,21 @@ def write_report(results_dir, items, bases, nsp, per_exp, method_agree, baseline
     else:
         L.append("_No faithfulness rows found in summary.csv (run with --faithfulness)._\n")
 
-    L.append("## 5. Limitations\n")
+    if part_rows:
+        L.append("## 5. Body-part attribution (Sapiens semantic regions)\n")
+        L.append(f"Aggregated across images using {part_combo[0]}/{part_combo[1]}. "
+                 "Semantic parts are comparable across images (unlike SLIC superpixels), so this "
+                 "ranks which body parts drive HPSv3's reward. Area-normalized values divide by the "
+                 "part's pixel share to remove the size confound.\n")
+        if part_fig:
+            L.append(f"![part importance]({part_fig})\n")
+        L.append(_md_table(part_rows, ["part", "n_images", "mean_importance",
+                                       "std_importance", "mean_area_norm_importance"]) + "\n")
+        top = [r["part"] for r in part_rows if r["part"] != "background"][:3]
+        if top:
+            L.append(f"Top reward-driving parts: **{', '.join(top)}**.\n")
+
+    L.append("## 6. Limitations\n")
     L.append(f"- Sample size: **{len(items)} images** — illustrative, not statistically general.\n")
     L.append("- All images are high-scoring; no low-quality contrast case.\n")
     L.append("- LIME has sampling noise; check stability across seeds before strong claims.\n")
@@ -355,6 +447,10 @@ def write_report(results_dir, items, bases, nsp, per_exp, method_agree, baseline
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--results-dir", required=True)
+    p.add_argument("--part-method", default="occlusion", choices=METHODS,
+                   help="Method used for the by-part aggregation (Sapiens runs).")
+    p.add_argument("--part-mode", default="black", choices=MODES,
+                   help="Baseline used for the by-part aggregation.")
     args = p.parse_args(argv)
 
     rd = args.results_dir
@@ -373,12 +469,21 @@ def main(argv=None):
         write_csv(os.path.join(rd, "agg_faithfulness.csv"),
                   [dict(image=short(s), method=m, mode=md, **v) for (s, m, md), v in sorted(faith.items())])
 
+    part_rows, has_parts = aggregate_parts(items, args.part_method, args.part_mode)
+    part_fig = None
+    if has_parts:
+        write_csv(os.path.join(rd, "agg_part_importance.csv"), part_rows)
+        part_fig = make_part_figure(rd, part_rows, args.part_method, args.part_mode)
+
     figs = make_figures(rd, per_exp, method_agree, baseline_agree, faith)
     montages = make_montages(rd, items)
-    report = write_report(rd, items, bases, nsp, per_exp, method_agree, baseline_agree, faith, figs, montages, prompts)
+    report = write_report(rd, items, bases, nsp, per_exp, method_agree, baseline_agree, faith,
+                          figs, montages, prompts, part_rows if has_parts else None,
+                          part_fig, (args.part_method, args.part_mode))
 
-    print(f"[aggregate] {len(items)} images, {len(per_exp)} experiments")
-    print(f"[aggregate] CSVs + {len(figs)} figures + {len(montages)} montages written to {rd}")
+    print(f"[aggregate] {len(items)} images, {len(per_exp)} experiments"
+          + (f", {len(part_rows)} body parts" if has_parts else ""))
+    print(f"[aggregate] CSVs + figures + {len(montages)} montages written to {rd}")
     print(f"[aggregate] report -> {report}")
 
 

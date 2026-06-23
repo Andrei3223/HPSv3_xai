@@ -30,6 +30,8 @@ from typing import List
 import numpy as np
 
 from hpsv3.inference import HPSv3RewardInferencer
+from hpsv3.xai.manifest import build_manifest
+from hpsv3.xai.sapiens_segments import load_labels as load_sapiens_labels, resize_seg
 from hpsv3.xai.perturbation import (
     load_image,
     make_segments,
@@ -42,62 +44,25 @@ from hpsv3.xai.perturbation import (
     save_result,
 )
 
-_FOX_PROMPT = (
-    "cute chibi anime cartoon fox, smiling wagging tail with a small cartoon "
-    "heart above sticker"
-)
-# Resolve assets relative to the repo root so they work regardless of the job's
-# working directory (this is why the assets were dropped in the first run).
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DEFAULT_MANIFEST = [
-    {"image": os.path.join(_REPO_ROOT, "assets/example1.png"), "prompt": _FOX_PROMPT},
-    {"image": os.path.join(_REPO_ROOT, "assets/example2.png"), "prompt": _FOX_PROMPT},
-]
-
-
-def _sample_from_hpdv3(d: str, n: int) -> List[dict]:
-    """Best-effort: pull n (image, prompt) pairs from an HPDv3 json manifest."""
-    for name in ("test.json", "train.json", "all.json"):
-        p = os.path.join(d, name)
-        if not os.path.exists(p):
-            continue
-        try:
-            data = json.load(open(p))
-            out = []
-            for e in data:
-                rel = e.get("path1") or e.get("path")
-                if not rel:
-                    continue
-                img = rel if os.path.isabs(rel) else os.path.join(d, rel)
-                if os.path.exists(img) and e.get("prompt"):
-                    out.append({"image": img, "prompt": e["prompt"]})
-                if len(out) >= n:
-                    break
-            if out:
-                print(f"[manifest] sampled {len(out)} pairs from {p}")
-                return out
-        except Exception as ex:  # pragma: no cover
-            print(f"[manifest] could not parse {p}: {ex}")
-    print(f"[manifest] no usable json found in {d}; falling back to assets.")
-    return []
-
-
-def build_manifest(args) -> List[dict]:
-    if args.manifest:
-        with open(args.manifest) as f:
-            items = json.load(f)
-        print(f"[manifest] loaded {len(items)} pairs from {args.manifest}")
-        return items
-    items = list(DEFAULT_MANIFEST)
-    if args.hpdv3_dir and args.num_dataset > 0:
-        items += _sample_from_hpdv3(args.hpdv3_dir, args.num_dataset)
-    # keep only pairs whose image actually exists
-    items = [it for it in items if os.path.exists(it["image"])]
-    return items
-
 
 def _stem(path: str) -> str:
     return os.path.splitext(os.path.basename(path))[0]
+
+
+def _segment_image(img, stem, args):
+    """Return (labels, part_names_or_None). Uses Sapiens labels if requested and
+    present, otherwise SLIC superpixels (also the fallback for non-human images)."""
+    if args.segments == "sapiens" and args.sapiens_dir:
+        lp = os.path.join(args.sapiens_dir, f"{stem}_sapiens_labels.npy")
+        pp = os.path.join(args.sapiens_dir, f"{stem}_parts.json")
+        if os.path.exists(lp) and os.path.exists(pp):
+            labels, id2name = load_sapiens_labels(stem, args.sapiens_dir)
+            if labels.shape != img.shape[:2]:
+                labels = resize_seg(labels, img.shape[:2])
+            print(f"  [sapiens] {len(set(id2name.values()))} parts: {sorted(set(id2name.values()))}")
+            return labels, {int(k): v for k, v in id2name.items()}
+        print(f"  [sapiens] no label map for {stem}; falling back to SLIC")
+    return make_segments(img, n_segments=args.n_segments, compactness=args.compactness), None
 
 
 def main(argv=None) -> None:
@@ -112,6 +77,10 @@ def main(argv=None) -> None:
     p.add_argument("--methods", nargs="+", default=["occlusion", "lime"],
                    choices=["occlusion", "lime"])
     p.add_argument("--modes", nargs="+", default=["gray", "mean", "blur", "black"])
+    p.add_argument("--segments", choices=["slic", "sapiens"], default="slic",
+                   help="Region source: SLIC superpixels or precomputed Sapiens body parts.")
+    p.add_argument("--sapiens-dir", default=None,
+                   help="Dir with <stem>_sapiens_labels.npy + <stem>_parts.json (Stage 0 output).")
     p.add_argument("--n-segments", type=int, default=100)
     p.add_argument("--compactness", type=float, default=10.0)
     p.add_argument("--n-samples", type=int, default=500, help="LIME samples.")
@@ -125,7 +94,7 @@ def main(argv=None) -> None:
     args = p.parse_args(argv)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    manifest = build_manifest(args)
+    manifest = build_manifest(args.manifest, args.hpdv3_dir, args.num_dataset)
     if not manifest:
         raise SystemExit("No valid (image, prompt) pairs to run.")
     json.dump(manifest, open(os.path.join(args.output_dir, "manifest.json"), "w"), indent=2)
@@ -152,7 +121,7 @@ def main(argv=None) -> None:
         stem = _stem(image_path)
         print(f"\n=== {image_path} ===")
         img = load_image(image_path)
-        labels = make_segments(img, n_segments=args.n_segments, compactness=args.compactness)
+        labels, part_names = _segment_image(img, stem, args)
         np.save(os.path.join(args.output_dir, f"{stem}_labels.npy"), labels)
         n_sp = int(labels.max()) + 1
 
@@ -173,11 +142,13 @@ def main(argv=None) -> None:
                     img, labels, imp, os.path.join(args.output_dir, f"{tag}.png"),
                     base_score=base, title=f"hpsv3 / {method} / {mode}",
                 )
+                meta = {"model": "hpsv3", "prompt": prompt, "image": image_path,
+                        "method": method, "mode": mode, "segments": args.segments}
+                if part_names is not None:
+                    meta["part_names"] = part_names
                 save_result(
                     os.path.join(args.output_dir, f"{tag}.npz"),
-                    img, labels, imp, base,
-                    {"model": "hpsv3", "prompt": prompt, "image": image_path,
-                     "method": method, "mode": mode},
+                    img, labels, imp, base, meta,
                 )
 
                 row = {

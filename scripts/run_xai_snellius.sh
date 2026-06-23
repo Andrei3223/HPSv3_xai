@@ -35,6 +35,12 @@ N_SEGMENTS=100
 N_SAMPLES=500
 NUM_DATASET=5          # extra images sampled from HPDv3 (plus the 2 repo assets)
 BATCH_SIZE=16
+
+# Region source: "slic" (default superpixels) or "sapiens" (semantic body parts).
+# For sapiens, run scripts/run_sapiens_seg_snellius.sh FIRST (same manifest).
+SEGMENTS=slic
+MANIFEST="$PROJECT/manifest.json"               # shared with the Sapiens stage
+SAPIENS_DIR="$PROJECT/results/sapiens_labels"   # Stage-0 output dir
 # ----------------------------------------------------------------------------
 
 mkdir -p "$PROJECT/logs"
@@ -60,17 +66,30 @@ fi
 echo "Using HPSv3 checkpoint: $CKPT"
 
 OUT="results/xai_${SLURM_JOB_ID:-local}"
-echo "Outputs -> $OUT"
+echo "Outputs -> $OUT  (segments=$SEGMENTS)"
+
+# Build/refresh the shared manifest so both stages use identical images.
+python scripts/build_manifest.py --hpdv3-dir "$HPDV3_DIR" --num-dataset "$NUM_DATASET" --out "$MANIFEST"
+
+SEG_ARGS=(--n-segments "$N_SEGMENTS")
+if [[ "$SEGMENTS" == "sapiens" ]]; then
+  if [[ ! -d "$SAPIENS_DIR" ]]; then
+    echo "ERROR: SEGMENTS=sapiens but $SAPIENS_DIR missing. Run scripts/run_sapiens_seg_snellius.sh first." >&2
+    exit 1
+  fi
+  SEG_ARGS=(--segments sapiens --sapiens-dir "$SAPIENS_DIR")
+fi
 
 # --- run the full experiment matrix (model loaded once) ---
 # Faithfulness is run for BOTH the gray (soft) and black (hard) baselines so the
 # deletion test can be read off the clean black baseline, not just gray.
 srun python -m hpsv3.xai.run_experiments \
   --hpsv3-ckpt "$CKPT" \
-  --hpdv3-dir "$HPDV3_DIR" --num-dataset "$NUM_DATASET" \
+  --manifest "$MANIFEST" \
+  "${SEG_ARGS[@]}" \
   --methods occlusion lime \
   --modes gray mean blur black \
-  --n-segments "$N_SEGMENTS" --n-samples "$N_SAMPLES" \
+  --n-samples "$N_SAMPLES" \
   --batch-size "$BATCH_SIZE" --device cuda \
   --faithfulness --faith-methods occlusion --faith-modes gray black \
   --output-dir "$OUT"
