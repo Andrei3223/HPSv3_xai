@@ -61,4 +61,8 @@ Paper = "https://arxiv.org/abs/2411.07232"
 include = ["hpsv3*", "generate*", "evaluate*"]
 
 [tool.setuptools.package-data]
-hpsv3 = ["config/*.yaml", "config/ds_config/*.json"]
+hpsv3 = ["config/*.yaml", "config/ds_config/*.json", "sae/configs/*.yaml"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pyarrow>=14.0"]
+sae = ["pyarrow>=14.0", "matplotlib>=3.8"]

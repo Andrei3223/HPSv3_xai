@@ -1,0 +1,29 @@
+scratch_root: /gpfs/scratch1/shared/scur0077
+
+paths:
+  hpsv3_checkpoint: ${scratch_root}/models/HPSv3/HPSv3.safetensors
+  hpdv3_root: ${scratch_root}/datasets/HPDv3
+  activation_dir: ${scratch_root}/sae/activations
+  sae_output_dir: ${scratch_root}/sae/checkpoints
+  analysis_dir: ${scratch_root}/sae/analysis
+  hf_home: ${scratch_root}/hf_cache
+
+download:
+  target_images: 150000
+
+extract:
+  batch_size: 4
+  device: cuda
+
+sae:
+  d_in: 3584
+  n_features: 16384
+  k: 32
+  auxk_alpha: 0.03125
+  batch_size: 4096
+  lr: 0.0004
+  epochs: 15
+
+analyze:
+  top_k_features: 32
+  top_n_images: 16
