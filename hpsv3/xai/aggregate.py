@@ -103,8 +103,8 @@ def aggregate_parts(items, method="occlusion", mode="black"):
     Returns (rows, present) where rows are per-part stats and `present` is True
     if any result carried part names.
     """
-    by_part = defaultdict(list)        # part -> [raw importance per image]
-    by_part_norm = defaultdict(list)   # part -> [importance / area-fraction]
+    by_imp = defaultdict(list)    # part -> [raw importance per image]
+    by_area = defaultdict(list)   # part -> [area fraction per image]
     present = False
     for stem, d in items.items():
         key = (method, mode)
@@ -121,19 +121,30 @@ def aggregate_parts(items, method="occlusion", mode="black"):
         for lid, name in part_names.items():
             if lid >= len(imp):
                 continue
-            area = float((labels == lid).sum()) / total
-            by_part[name].append(float(imp[lid]))
-            if area > 0:
-                by_part_norm[name].append(float(imp[lid]) / area)
+            by_imp[name].append(float(imp[lid]))
+            by_area[name].append(float((labels == lid).sum()) / total)
     rows = []
-    for name in sorted(by_part):
-        vals = np.array(by_part[name])
-        nvals = np.array(by_part_norm.get(name, []))
+    for name in sorted(by_imp):
+        vals = np.array(by_imp[name])
+        areas = np.array(by_area[name])
+        n = len(vals)
+        mean_area = float(areas.mean())
+        # robust per-area = ratio of means (avoids tiny-region division blow-ups);
+        # only meaningful for parts that cover a non-trivial area (>=2%).
+        imp_per_area = float(vals.mean() / mean_area) if mean_area > 0 else float("nan")
+        # SEM = std / sqrt(n) for error bars on the means.
+        sem_imp = float(vals.std(ddof=1) / np.sqrt(n)) if n > 1 else 0.0
+        per_img_ratio = vals[areas > 0] / areas[areas > 0]
+        sem_ppa = float(per_img_ratio.std(ddof=1) / np.sqrt(len(per_img_ratio))) if len(per_img_ratio) > 1 else 0.0
         rows.append({
-            "part": name, "n_images": len(vals),
+            "part": name, "n_images": n,
+            "mean_area_pct": round(mean_area * 100, 2),
             "mean_importance": round(float(vals.mean()), 4),
             "std_importance": round(float(vals.std()), 4),
-            "mean_area_norm_importance": round(float(nvals.mean()) if len(nvals) else float("nan"), 4),
+            "sem_importance": round(sem_imp, 4),
+            "imp_per_area": round(imp_per_area, 2),
+            "sem_imp_per_area": round(sem_ppa, 2),
+            "reliable_area": mean_area >= 0.02,
         })
     rows.sort(key=lambda r: r["mean_importance"], reverse=True)
     return rows, present
@@ -289,21 +300,30 @@ def make_part_figure(results_dir, part_rows, method, mode):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    rows = [r for r in part_rows if r["part"] != "background"]
-    if not rows:
+    # Left: raw importance for all parts (shows background dominates by SIZE).
+    # Right: importance-per-area for reliable parts only (the semantic ranking).
+    raw_rows = list(part_rows)
+    norm_rows = [r for r in part_rows if r["reliable_area"] and r["part"] != "background"]
+    if not raw_rows:
         return None
-    parts = [r["part"] for r in rows]
-    raw = [r["mean_importance"] for r in rows]
-    norm = [r["mean_area_norm_importance"] for r in rows]
-    x = np.arange(len(parts))
-    fig, axes = plt.subplots(1, 2, figsize=(max(8, 1.2 * len(parts)), 5))
-    axes[0].bar(x, raw, color="C0")
-    axes[0].set_title(f"Mean importance per part ({method}/{mode})")
+    fig, axes = plt.subplots(1, 2, figsize=(max(10, 1.1 * len(raw_rows)), 5))
+
+    p0 = [r["part"] for r in raw_rows]
+    axes[0].bar(np.arange(len(p0)), [r["mean_importance"] for r in raw_rows],
+                yerr=[r.get("sem_importance", 0) for r in raw_rows], capsize=3, color="C0")
+    axes[0].set_title(f"Raw mean importance ({method}/{mode})\n(background dominates by area)")
     axes[0].set_ylabel("mean reward drop")
-    axes[1].bar(x, norm, color="C1")
-    axes[1].set_title("Area-normalized (importance per % area)")
+    axes[0].set_xticks(np.arange(len(p0)))
+    axes[0].set_xticklabels([f"{r['part']}\n(n={r['n_images']})" for r in raw_rows], rotation=40, ha="right", fontsize=8)
+
+    p1 = [r["part"] for r in norm_rows]
+    axes[1].bar(np.arange(len(p1)), [r["imp_per_area"] for r in norm_rows],
+                yerr=[r.get("sem_imp_per_area", 0) for r in norm_rows], capsize=3, color="C1")
+    axes[1].set_title("Importance per unit area\n(parts ≥2% area; the semantic ranking)")
+    axes[1].set_ylabel("reward drop / area fraction")
+    axes[1].set_xticks(np.arange(len(p1)))
+    axes[1].set_xticklabels([f"{r['part']}\n(n={r['n_images']})" for r in norm_rows], rotation=40, ha="right", fontsize=8)
     for ax in axes:
-        ax.set_xticks(x); ax.set_xticklabels(parts, rotation=40, ha="right", fontsize=8)
         ax.axhline(0, color="k", lw=0.5)
     fig.tight_layout()
     name = "fig_part_importance.png"
@@ -426,11 +446,16 @@ def write_report(results_dir, items, bases, nsp, per_exp, method_agree, baseline
                  "part's pixel share to remove the size confound.\n")
         if part_fig:
             L.append(f"![part importance]({part_fig})\n")
-        L.append(_md_table(part_rows, ["part", "n_images", "mean_importance",
-                                       "std_importance", "mean_area_norm_importance"]) + "\n")
-        top = [r["part"] for r in part_rows if r["part"] != "background"][:3]
-        if top:
-            L.append(f"Top reward-driving parts: **{', '.join(top)}**.\n")
+        L.append(_md_table(part_rows, ["part", "n_images", "mean_area_pct",
+                                       "mean_importance", "std_importance", "imp_per_area"]) + "\n")
+        L.append("*Raw `mean_importance` is size-confounded (background covers ~87% of the image, "
+                 "so occluding it changes the most pixels). `imp_per_area` (reward drop ÷ area "
+                 "fraction) is the fair semantic measure; it is unreliable for parts <2% area.*\n")
+        rel = [r for r in part_rows if r.get("reliable_area") and r["part"] != "background"]
+        rel.sort(key=lambda r: r["imp_per_area"], reverse=True)
+        if rel:
+            top = ", ".join(f"{r['part']} ({r['imp_per_area']:.0f})" for r in rel[:3])
+            L.append(f"Most reward-dense parts (importance per unit area): **{top}**.\n")
 
     L.append("## 6. Limitations\n")
     L.append(f"- Sample size: **{len(items)} images** — illustrative, not statistically general.\n")

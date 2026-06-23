@@ -29,6 +29,9 @@ def main():
     ap.add_argument("--hpdv3-dir", default=None)
     ap.add_argument("--num-dataset", type=int, default=5)
     ap.add_argument("--no-assets", action="store_true")
+    ap.add_argument("--shuffle", action="store_true",
+                    help="Random-but-reproducible sample (use for large runs).")
+    ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="manifest.json")
     args = ap.parse_args()
 
@@ -37,6 +40,8 @@ def main():
         hpdv3_dir=args.hpdv3_dir,
         num_dataset=args.num_dataset,
         include_assets=not args.no_assets,
+        shuffle=args.shuffle,
+        seed=args.seed,
     )
     if not items:
         raise SystemExit("No valid (image, prompt) pairs found.")

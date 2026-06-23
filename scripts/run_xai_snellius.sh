@@ -30,11 +30,14 @@ export TOKENIZERS_PARALLELISM=false
 # Path to the venv created on the login node (see setup commands in the README).
 VENV_DIR=/gpfs/scratch1/shared/scur0283/venvs/hpsv3
 
-# Experiment knobs.
+# Experiment knobs (all overridable at submit time via --export=ALL,VAR=...).
 N_SEGMENTS=100
-N_SAMPLES=500
-NUM_DATASET=5          # extra images sampled from HPDv3 (plus the 2 repo assets)
-BATCH_SIZE=16
+N_SAMPLES="${N_SAMPLES:-500}"
+NUM_DATASET="${NUM_DATASET:-5}"     # extra HPDv3 images (plus the 2 repo assets)
+BATCH_SIZE="${BATCH_SIZE:-16}"
+METHODS="${METHODS:-occlusion lime}"  # e.g. METHODS=occlusion for a fast large run
+MODES="${MODES:-gray mean blur black}"
+FAITH="${FAITH:-1}"                  # 1 = run faithfulness, 0 = skip (faster)
 
 # Region source: "slic" (default superpixels) or "sapiens" (semantic body parts).
 # Override at submit time:  sbatch --export=ALL,SEGMENTS=sapiens scripts/run_xai_snellius.sh
@@ -69,8 +72,14 @@ echo "Using HPSv3 checkpoint: $CKPT"
 OUT="results/xai_${SLURM_JOB_ID:-local}"
 echo "Outputs -> $OUT  (segments=$SEGMENTS)"
 
-# Build/refresh the shared manifest so both stages use identical images.
-python scripts/build_manifest.py --hpdv3-dir "$HPDV3_DIR" --num-dataset "$NUM_DATASET" --out "$MANIFEST"
+# Build the shared manifest only if it does not exist, so both stages use the
+# SAME images (sampling is reproducible with a fixed seed).
+if [[ ! -f "$MANIFEST" ]]; then
+  python scripts/build_manifest.py --hpdv3-dir "$HPDV3_DIR" \
+    --num-dataset "$NUM_DATASET" --shuffle --seed 0 --out "$MANIFEST"
+else
+  echo "Using existing manifest: $MANIFEST ($(python -c "import json;print(len(json.load(open('$MANIFEST'))))") images)"
+fi
 
 SEG_ARGS=(--n-segments "$N_SEGMENTS")
 if [[ "$SEGMENTS" == "sapiens" ]]; then
@@ -81,6 +90,11 @@ if [[ "$SEGMENTS" == "sapiens" ]]; then
   SEG_ARGS=(--segments sapiens --sapiens-dir "$SAPIENS_DIR")
 fi
 
+FAITH_ARGS=()
+if [[ "$FAITH" == "1" ]]; then
+  FAITH_ARGS=(--faithfulness --faith-methods occlusion --faith-modes gray black)
+fi
+
 # --- run the full experiment matrix (model loaded once) ---
 # Faithfulness is run for BOTH the gray (soft) and black (hard) baselines so the
 # deletion test can be read off the clean black baseline, not just gray.
@@ -88,11 +102,11 @@ srun python -m hpsv3.xai.run_experiments \
   --hpsv3-ckpt "$CKPT" \
   --manifest "$MANIFEST" \
   "${SEG_ARGS[@]}" \
-  --methods occlusion lime \
-  --modes gray mean blur black \
+  --methods $METHODS \
+  --modes $MODES \
   --n-samples "$N_SAMPLES" \
   --batch-size "$BATCH_SIZE" --device cuda \
-  --faithfulness --faith-methods occlusion --faith-modes gray black \
+  "${FAITH_ARGS[@]}" \
   --output-dir "$OUT"
 
 # --- aggregate into report tables, figures, montages, REPORT.md (no GPU needed) ---

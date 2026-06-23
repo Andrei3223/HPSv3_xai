@@ -1,0 +1,15 @@
+image,method,mode,deletion_auc,deletion_auc_random,insertion_auc,insertion_auc_random
+047eb1a3,occlusion,black,-8.2205,4.5841,6.9519,-7.0584
+047eb1a3,occlusion,gray,5.4046,8.1162,8.7563,5.6356
+0f019494,occlusion,black,-8.0051,7.4817,11.627,-4.9916
+0f019494,occlusion,gray,11.5427,13.1327,14.6795,11.1689
+38eb6939,occlusion,black,-5.646,4.2358,6.553,-0.9808
+38eb6939,occlusion,gray,6.0394,6.0462,7.9778,5.2655
+d534420e,occlusion,black,-5.3175,-5.3175,4.5829,4.5829
+d534420e,occlusion,gray,7.4679,7.4679,8.8317,8.8317
+e7361205,occlusion,black,-5.79,-2.7923,4.5114,2.7649
+e7361205,occlusion,gray,7.0098,6.7453,8.8775,7.5523
+example1,occlusion,black,0.2982,0.2982,0.2706,0.2706
+example1,occlusion,gray,9.1824,9.1824,9.1456,9.1456
+example2,occlusion,black,-8.4951,4.606,5.5247,-8.2328
+example2,occlusion,gray,5.0823,6.698,6.8074,4.7981

@@ -23,14 +23,22 @@ DEFAULT_ASSETS = [
 ]
 
 
-def sample_from_hpdv3(d: str, n: int) -> List[dict]:
-    """Best-effort: pull n (image, prompt) pairs from an HPDv3 json manifest."""
+def sample_from_hpdv3(d: str, n: int, shuffle: bool = False, seed: int = 0) -> List[dict]:
+    """Best-effort: pull n (image, prompt) pairs from an HPDv3 json manifest.
+
+    shuffle=True draws a random-but-reproducible sample (fixed seed) instead of the
+    first n entries — important when scaling to ~100 images for variety.
+    """
+    import random
+
     for name in ("test.json", "train.json", "all.json"):
         p = os.path.join(d, name)
         if not os.path.exists(p):
             continue
         try:
             data = json.load(open(p))
+            if shuffle:
+                random.Random(seed).shuffle(data)
             out = []
             for e in data:
                 rel = e.get("path1") or e.get("path")
@@ -42,7 +50,7 @@ def sample_from_hpdv3(d: str, n: int) -> List[dict]:
                 if len(out) >= n:
                     break
             if out:
-                print(f"[manifest] sampled {len(out)} pairs from {p}")
+                print(f"[manifest] sampled {len(out)} pairs from {p} (shuffle={shuffle})")
                 return out
         except Exception as ex:  # pragma: no cover
             print(f"[manifest] could not parse {p}: {ex}")
@@ -55,6 +63,8 @@ def build_manifest(
     hpdv3_dir: Optional[str] = None,
     num_dataset: int = 0,
     include_assets: bool = True,
+    shuffle: bool = False,
+    seed: int = 0,
 ) -> List[dict]:
     """Return a list of {"image", "prompt"} dicts; only images that exist are kept."""
     if manifest:
@@ -63,5 +73,5 @@ def build_manifest(
     else:
         items = list(DEFAULT_ASSETS) if include_assets else []
         if hpdv3_dir and num_dataset > 0:
-            items += sample_from_hpdv3(hpdv3_dir, num_dataset)
+            items += sample_from_hpdv3(hpdv3_dir, num_dataset, shuffle=shuffle, seed=seed)
     return [it for it in items if os.path.exists(it["image"])]
