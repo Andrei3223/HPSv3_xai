@@ -124,3 +124,9 @@ tmp/
 CLAUDE.md
 deprecated/
 cohp_output_*/
+
+# --- XAI results: keep reports/figures/CSVs in git, exclude bulky regenerable data ---
+.DS_Store
+**/.DS_Store
+results/**/*.npy
+results/**/*.npz
