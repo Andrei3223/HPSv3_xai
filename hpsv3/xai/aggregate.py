@@ -132,10 +132,21 @@ def aggregate_parts(items, method="occlusion", mode="black"):
         # robust per-area = ratio of means (avoids tiny-region division blow-ups);
         # only meaningful for parts that cover a non-trivial area (>=2%).
         imp_per_area = float(vals.mean() / mean_area) if mean_area > 0 else float("nan")
-        # SEM = std / sqrt(n) for error bars on the means.
+        # SEM = std / sqrt(n) for error bars on the raw mean.
         sem_imp = float(vals.std(ddof=1) / np.sqrt(n)) if n > 1 else 0.0
-        per_img_ratio = vals[areas > 0] / areas[areas > 0]
-        sem_ppa = float(per_img_ratio.std(ddof=1) / np.sqrt(len(per_img_ratio))) if len(per_img_ratio) > 1 else 0.0
+        # Per-area is a ratio-of-means; a per-image-ratio SEM is invalid (tiny areas
+        # blow it up). Use a bootstrap SE of sum(imp)/sum(area) instead.
+        if n > 1 and mean_area > 0:
+            rng = np.random.default_rng(0)
+            boot = []
+            for _ in range(1000):
+                idx = rng.integers(0, n, n)
+                a = areas[idx].sum()
+                if a > 0:
+                    boot.append(vals[idx].sum() / a)
+            sem_ppa = float(np.std(boot, ddof=1))
+        else:
+            sem_ppa = 0.0
         rows.append({
             "part": name, "n_images": n,
             "mean_area_pct": round(mean_area * 100, 2),

@@ -1,0 +1,11 @@
+part,n_images,mean_area_pct,mean_importance,std_importance,sem_importance,imp_per_area,sem_imp_per_area,reliable_area
+background,91,86.47,13.1854,7.2903,0.7685,15.25,0.7,True
+face,60,2.69,4.232,3.2149,0.4185,157.2,168.31,True
+hair,59,2.7,2.0131,2.2594,0.2967,74.57,746.34,True
+upper_clothing,60,9.23,1.7108,1.6456,0.2142,18.54,345.06,True
+arms,53,1.81,0.7524,0.9533,0.1322,41.53,642.16,False
+hands,57,0.94,0.6363,0.7511,0.1004,67.49,290.44,False
+legs,18,1.42,0.5307,0.575,0.1395,37.33,67.2,False
+lower_clothing,44,2.72,0.507,0.728,0.111,18.66,201.81,True
+feet,42,0.7,0.3259,0.5106,0.0797,46.74,897.83,False
+torso,36,0.91,0.2745,0.4258,0.072,30.15,741.11,False

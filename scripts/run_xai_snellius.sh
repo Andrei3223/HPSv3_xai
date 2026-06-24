@@ -44,7 +44,7 @@ FAITH="${FAITH:-1}"                  # 1 = run faithfulness, 0 = skip (faster)
 # For sapiens, run scripts/run_sapiens_seg_snellius.sh FIRST (same manifest).
 SEGMENTS="${SEGMENTS:-slic}"
 MANIFEST="$PROJECT/manifest.json"               # shared with the Sapiens stage
-SAPIENS_DIR="$PROJECT/results/sapiens_labels"   # Stage-0 output dir
+SAPIENS_DIR="${SAPIENS_DIR:-$PROJECT/results/sapiens_labels}"   # Stage-0 region maps (sapiens OR scene)
 # ----------------------------------------------------------------------------
 
 mkdir -p "$PROJECT/logs"
